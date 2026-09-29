@@ -27,7 +27,7 @@ export const experiments: Experiment[] = [
     title: 'YouTube Signal Finder',
     description: 'Find real pains and business opportunities hidden in YouTube comments.',
     pageDescription: 'Find comments containing real pains or business opportunities.',
-    helperNote: 'For speed, this demo analyzes up to 40 comments per video.',
+    helperNote: 'For speed, this demo analyzes up to 25 comments per video.',
     inputHeading: 'Add a video to explore',
     workflowDownload: {
       path: '/workflows/youtube-signal-finder-lite.json',
