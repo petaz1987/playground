@@ -85,7 +85,7 @@ export default async function handler(request: Request, context: Context): Promi
     upstream = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${secret}`,
+        'x-staroba-api-key': secret,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
