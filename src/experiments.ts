@@ -11,6 +11,7 @@ export type Experiment = {
   title: string
   description: string
   pageDescription: string
+  helperNote?: string
   inputHeading: string
   inputs: ExperimentInput[]
 }
@@ -22,6 +23,7 @@ export const experiments: Experiment[] = [
     title: 'YouTube Signal Finder',
     description: 'Find real pains and business opportunities hidden in YouTube comments.',
     pageDescription: 'Find comments containing real pains or business opportunities.',
+    helperNote: 'For speed, this demo analyzes up to 40 comments per video.',
     inputHeading: 'Add a video to explore',
     inputs: [
       {

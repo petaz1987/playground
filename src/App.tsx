@@ -1,6 +1,6 @@
 import type { FormEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Route, Routes } from 'react-router-dom'
 import { experiments } from './experiments'
 
@@ -66,14 +66,27 @@ function ExperimentShell({ experiment }: { experiment: (typeof experiments)[numb
   const [requestState, setRequestState] = useState<RequestState>({ status: 'idle' })
   const [activeTab, setActiveTab] = useState<ResultTab>('result')
   const [copyLabel, setCopyLabel] = useState('Copy')
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const isSubmitting = useRef(false)
   const isLoading = requestState.status === 'loading'
   const hasResult = requestState.status === 'success'
+
+  useEffect(() => {
+    if (!isLoading) return
+
+    const startedAt = Date.now()
+    const intervalId = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000))
+    }, 1_000)
+
+    return () => window.clearInterval(intervalId)
+  }, [isLoading])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (isSubmitting.current) return
     isSubmitting.current = true
+    setElapsedSeconds(0)
     setRequestState({ status: 'loading' })
     setActiveTab('result')
     setCopyLabel('Copy')
@@ -154,9 +167,8 @@ function ExperimentShell({ experiment }: { experiment: (typeof experiments)[numb
               </div>
             ))}
             <button className="analyze-button" type="submit" disabled={isLoading}>{isLoading ? 'Analyzing…' : 'Analyze'}</button>
-            <p className="form-note" aria-live="polite">
-              {isLoading ? 'Looking for signals in the comments…' : 'Submit a video to find patterns in its comments.'}
-            </p>
+            <p className="form-note">Submit a video to find patterns in its comments.</p>
+            {experiment.helperNote && <p className="form-note comment-limit-note">{experiment.helperNote}</p>}
           </form>
         </section>
 
@@ -176,7 +188,7 @@ function ExperimentShell({ experiment }: { experiment: (typeof experiments)[numb
           </div>
           <div className="result-content" aria-live="polite">
             {requestState.status === 'idle' && <div className="result-empty"><span className="empty-glyph" aria-hidden="true">···</span><p>Your results will show up here.</p></div>}
-            {requestState.status === 'loading' && <div className="result-message" role="status"><span className="status-dot" /> Analyzing comments…</div>}
+            {requestState.status === 'loading' && <div className="result-message" role="status"><span className="loading-spinner" aria-hidden="true" /><span>Analyzing comments… <span aria-hidden="true">{elapsedSeconds}s</span></span></div>}
             {requestState.status === 'error' && <p className="result-error" role="alert">{requestState.message}</p>}
             {requestState.status === 'success' && activeTab === 'result' && <div className="markdown-content"><ReactMarkdown>{requestState.result.markdown}</ReactMarkdown></div>}
             {requestState.status === 'success' && activeTab === 'json' && <pre className="formatted-json"><code>{JSON.stringify(requestState.result.json, null, 2)}</code></pre>}
