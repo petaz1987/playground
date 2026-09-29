@@ -25,7 +25,7 @@ export const experiments: Experiment[] = [
     inputHeading: 'Add a video to explore',
     inputs: [
       {
-        id: 'video-url',
+        id: 'video',
         type: 'text',
         label: 'YouTube video URL or ID',
         placeholder: 'https://youtube.com/watch?v=…',

@@ -1,13 +1,31 @@
-import type { ReactNode } from 'react'
+import type { FormEvent, ReactNode } from 'react'
+import ReactMarkdown from 'react-markdown'
+import { useRef, useState } from 'react'
 import { Link, Route, Routes } from 'react-router-dom'
 import { experiments } from './experiments'
+
+type AnalysisResult = { markdown: string; json: unknown }
+type RequestState =
+  | { status: 'idle' | 'loading' }
+  | { status: 'success'; result: AnalysisResult }
+  | { status: 'error'; message: string }
+type ResultTab = 'result' | 'json'
+
+function errorMessageForStatus(status: number) {
+  if (status === 400 || status === 415) return 'Invalid input. Check the video URL or ID and try again.'
+  if (status === 429) return 'Too many requests. Wait a few minutes before trying again.'
+  if (status === 503) return 'Analysis unavailable right now. Please try again later.'
+  if (status === 504) return 'Request timed out. Please try again.'
+  if (status === 502) return 'Analysis unavailable right now. Please try again later.'
+  return 'Temporary server problem. Please try again.'
+}
 
 function PageFrame({ children }: { children: ReactNode }) {
   return (
     <div className="page-frame">
       <header className="site-header">
         <Link className="wordmark" to="/" aria-label="Petr Staroba Playground home">
-          <span className="wordmark-mark" aria-hidden="true">P</span>
+          <img className="wordmark-mark" src="/playground-mark.svg" alt="" />
           <span>PETR STAROBA <span className="wordmark-divider">/</span> PLAYGROUND</span>
         </Link>
         <span className="header-note">A small lab for useful ideas</span>
@@ -45,6 +63,70 @@ function HomePage() {
 }
 
 function ExperimentShell({ experiment }: { experiment: (typeof experiments)[number] }) {
+  const [requestState, setRequestState] = useState<RequestState>({ status: 'idle' })
+  const [activeTab, setActiveTab] = useState<ResultTab>('result')
+  const [copyLabel, setCopyLabel] = useState('Copy')
+  const isSubmitting = useRef(false)
+  const isLoading = requestState.status === 'loading'
+  const hasResult = requestState.status === 'success'
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (isSubmitting.current) return
+    isSubmitting.current = true
+    setRequestState({ status: 'loading' })
+    setActiveTab('result')
+    setCopyLabel('Copy')
+
+    const formData = new FormData(event.currentTarget)
+    const inputs = Object.fromEntries(
+      experiment.inputs.map(({ id }) => [id, String(formData.get(id) ?? '')]),
+    )
+
+    try {
+      const response = await fetch(`/api/experiments/${experiment.slug}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs }),
+      })
+
+      if (!response.ok) {
+        setRequestState({ status: 'error', message: errorMessageForStatus(response.status) })
+        return
+      }
+
+      const payload: unknown = await response.json()
+      if (
+        !payload || typeof payload !== 'object' ||
+        !('markdown' in payload) || typeof payload.markdown !== 'string' ||
+        !('json' in payload)
+      ) {
+        setRequestState({ status: 'error', message: 'Temporary server problem. Please try again.' })
+        return
+      }
+
+      setRequestState({ status: 'success', result: { markdown: payload.markdown, json: payload.json } })
+    } catch {
+      setRequestState({ status: 'error', message: 'Temporary server problem. Please try again.' })
+    } finally {
+      isSubmitting.current = false
+    }
+  }
+
+  async function copyResult() {
+    if (requestState.status !== 'success') return
+    const text = activeTab === 'json'
+      ? JSON.stringify(requestState.result.json, null, 2)
+      : requestState.result.markdown
+
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyLabel('Copied')
+    } catch {
+      setCopyLabel('Copy unavailable')
+    }
+  }
+
   return (
     <PageFrame>
       <div className="experiment-page">
@@ -60,19 +142,21 @@ function ExperimentShell({ experiment }: { experiment: (typeof experiments)[numb
             <span className="step-number">01</span>
             <h2 id="input-heading">{experiment.inputHeading}</h2>
           </div>
-          <form className="input-form" onSubmit={(event) => event.preventDefault()}>
+          <form className="input-form" onSubmit={handleSubmit}>
             {experiment.inputs.map((input) => (
               <div className="configured-input" key={input.id}>
                 <label htmlFor={input.id}>{input.label}</label>
                 {input.type === 'textarea' ? (
-                  <textarea id={input.id} name={input.id} placeholder={input.placeholder} rows={4} />
+                  <textarea id={input.id} name={input.id} placeholder={input.placeholder} rows={4} disabled={isLoading} />
                 ) : (
-                  <input id={input.id} name={input.id} type="text" placeholder={input.placeholder} />
+                  <input id={input.id} name={input.id} type="text" placeholder={input.placeholder} disabled={isLoading} />
                 )}
               </div>
             ))}
-            <button className="analyze-button" type="submit" disabled>Analyze</button>
-            <p className="form-note">This experiment is under construction. Analysis is not available yet.</p>
+            <button className="analyze-button" type="submit" disabled={isLoading}>{isLoading ? 'Analyzing…' : 'Analyze'}</button>
+            <p className="form-note" aria-live="polite">
+              {isLoading ? 'Looking for signals in the comments…' : 'Submit a video to find patterns in its comments.'}
+            </p>
           </form>
         </section>
 
@@ -82,14 +166,20 @@ function ExperimentShell({ experiment }: { experiment: (typeof experiments)[numb
               <span className="step-number">02</span>
               <h2 id="result-heading">Your findings</h2>
             </div>
-            <div className="result-tabs" aria-label="Result format">
-              <span className="result-tab active" aria-current="page">Result</span>
-              <span className="result-tab">JSON</span>
+            <div className="result-controls">
+              <div className="result-tabs" aria-label="Result format">
+                <button className={`result-tab${activeTab === 'result' ? ' active' : ''}`} type="button" aria-pressed={activeTab === 'result'} disabled={!hasResult} onClick={() => setActiveTab('result')}>Result</button>
+                <button className={`result-tab${activeTab === 'json' ? ' active' : ''}`} type="button" aria-pressed={activeTab === 'json'} disabled={!hasResult} onClick={() => setActiveTab('json')}>JSON</button>
+              </div>
+              {hasResult && <button className="copy-button" type="button" onClick={copyResult} aria-live="polite">{copyLabel}</button>}
             </div>
           </div>
-          <div className="result-empty">
-            <span className="empty-glyph" aria-hidden="true">···</span>
-            <p>Your results will show up here.</p>
+          <div className="result-content" aria-live="polite">
+            {requestState.status === 'idle' && <div className="result-empty"><span className="empty-glyph" aria-hidden="true">···</span><p>Your results will show up here.</p></div>}
+            {requestState.status === 'loading' && <div className="result-message" role="status"><span className="status-dot" /> Analyzing comments…</div>}
+            {requestState.status === 'error' && <p className="result-error" role="alert">{requestState.message}</p>}
+            {requestState.status === 'success' && activeTab === 'result' && <div className="markdown-content"><ReactMarkdown>{requestState.result.markdown}</ReactMarkdown></div>}
+            {requestState.status === 'success' && activeTab === 'json' && <pre className="formatted-json"><code>{JSON.stringify(requestState.result.json, null, 2)}</code></pre>}
           </div>
         </section>
 
