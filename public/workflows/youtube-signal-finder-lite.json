@@ -134,7 +134,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "/demo/youtube-pain-miner",
+        "path": "youtube-signal-finder",
         "authentication": "headerAuth",
         "responseMode": "responseNode",
         "options": {}
