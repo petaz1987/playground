@@ -79,7 +79,7 @@ export default async function handler(request: Request, context: Context): Promi
     return jsonResponse(503, { error: 'Analysis unavailable', message: 'Analysis is not available right now.' })
   }
 
-  const timeout = AbortSignal.timeout(25_000)
+  const timeout = AbortSignal.timeout(55_000)
   let upstream: Response
   try {
     upstream = await fetch(webhookUrl, {
