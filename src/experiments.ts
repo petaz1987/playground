@@ -14,6 +14,10 @@ export type Experiment = {
   helperNote?: string
   inputHeading: string
   inputs: ExperimentInput[]
+  workflowDownload?: {
+    path: string
+    filename: string
+  }
 }
 
 export const experiments: Experiment[] = [
@@ -25,12 +29,16 @@ export const experiments: Experiment[] = [
     pageDescription: 'Find comments containing real pains or business opportunities.',
     helperNote: 'For speed, this demo analyzes up to 40 comments per video.',
     inputHeading: 'Add a video to explore',
+    workflowDownload: {
+      path: '/workflows/youtube-signal-finder-lite.json',
+      filename: 'youtube-signal-finder-lite.json',
+    },
     inputs: [
       {
         id: 'video',
         type: 'text',
-        label: 'YouTube video URL or ID',
-        placeholder: 'https://youtube.com/watch?v=…',
+        label: 'YouTube video URL',
+        placeholder: 'https://www.youtube.com/watch?v=...',
       },
     ],
   },

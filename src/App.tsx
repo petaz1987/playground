@@ -144,11 +144,18 @@ function ExperimentShell({ experiment }: { experiment: (typeof experiments)[numb
     <PageFrame>
       <div className="experiment-page">
         <Link className="back-link" to="/">← All experiments</Link>
-        <section className="experiment-heading">
-          <p className="eyebrow"><span className="status-dot" /> PLAYGROUND / EXPERIMENT {experiment.number}</p>
-          <h1>{experiment.title}</h1>
-          <p>{experiment.pageDescription}</p>
-        </section>
+        <div className="experiment-heading-row">
+          <section className="experiment-heading">
+            <p className="eyebrow"><span className="status-dot" /> PLAYGROUND / EXPERIMENT {experiment.number}</p>
+            <h1>{experiment.title}</h1>
+            <p>{experiment.pageDescription}</p>
+          </section>
+          {experiment.workflowDownload && (
+            <a className="workflow-download" href={experiment.workflowDownload.path} download={experiment.workflowDownload.filename}>
+              Download n8n workflow <span aria-hidden="true">↓</span>
+            </a>
+          )}
+        </div>
 
         <section className="tool-panel" aria-labelledby="input-heading">
           <div className="panel-heading">
@@ -195,11 +202,6 @@ function ExperimentShell({ experiment }: { experiment: (typeof experiments)[numb
           </div>
         </section>
 
-        <aside className="workflow-note">
-          <span className="workflow-icon" aria-hidden="true">↳</span>
-          <div><h2>Want to see how it works?</h2><p>The workflow will be available to explore soon.</p></div>
-          <button className="secondary-button" type="button" disabled>Download n8n workflow <span aria-hidden="true">↓</span></button>
-        </aside>
       </div>
     </PageFrame>
   )

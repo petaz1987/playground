@@ -1,0 +1,771 @@
+{
+  "name": "YouTube Signal Finder — Playground Lite",
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "47c172ad-90c8-4cf6-a9f5-50607e04cc90",
+              "name": "id",
+              "type": "string",
+              "value": "={{ $json.items[0].id }}"
+            },
+            {
+              "id": "9e639efa-0714-4b06-9847-f7b4b2fbef59",
+              "name": "viewCount",
+              "type": "string",
+              "value": "={{ $json.items[0].statistics.viewCount }}"
+            },
+            {
+              "id": "93328f00-91b8-425b-ad0f-a330b2f95242",
+              "name": "likeCount",
+              "type": "string",
+              "value": "={{ $json.items[0].statistics.likeCount }}"
+            },
+            {
+              "id": "015b0fb2-2a98-464c-a21b-51100616f26a",
+              "name": "commentCount",
+              "type": "string",
+              "value": "={{ $json.items[0].statistics.commentCount }}"
+            },
+            {
+              "id": "cf1e1ec3-a138-42b8-8747-d249afa58dd3",
+              "name": "description",
+              "type": "string",
+              "value": "={{ $json.items[0].snippet.description }}"
+            },
+            {
+              "id": "c5c9a3a2-b820-4932-a38a-e21102992215",
+              "name": "title",
+              "type": "string",
+              "value": "={{ $json.items[0].snippet.title }}"
+            },
+            {
+              "id": "38216ead-1f8d-4f93-b6ad-5ef709a1ad2a",
+              "name": "channelTitle",
+              "type": "string",
+              "value": "={{ $json.items[0].snippet.channelTitle }}"
+            },
+            {
+              "id": "e50b0f7b-3e37-4557-8863-d68d4fa505c8",
+              "name": "channelId",
+              "type": "string",
+              "value": "={{ $json.items[0].snippet.channelId }}"
+            },
+            {
+              "id": "e4b9fcd9-99aa-45a5-b801-3b4bd6beaeb1",
+              "name": "duration",
+              "value": "={{ $json.items[0].contentDetails.duration }}",
+              "type": "string"
+            },
+            {
+              "id": "e3cd33ee-4b55-419a-b0c7-7260a054a3c0",
+              "name": "publishedAt",
+              "value": "={{ $json.items[0].snippet.publishedAt }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "80533c7a-6cbf-4759-acfc-abc3af0e87f7",
+      "name": "Select Video Metadata",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -416,
+        -144
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        208,
+        -144
+      ],
+      "id": "6eaf21cb-d958-42fd-901c-d5951583bbd0",
+      "name": "Split Out Comment Threads"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = [];\n\nfor (const item of $input.all()) {\n  const thread = item.json;\n\n  const comment = thread.snippet?.topLevelComment;\n  const snippet = comment?.snippet;\n\n  // Skip malformed/incomplete comment threads\n  if (!comment?.id || !snippet?.videoId || !snippet?.textOriginal) {\n    continue;\n  }\n\n  output.push({\n    json: {\n      comment_id: comment.id,\n      video_id: snippet.videoId,\n\n      comment_text: snippet.textOriginal,\n\n      like_count: Number(snippet.likeCount ?? 0),\n      reply_count: Number(thread.snippet?.totalReplyCount ?? 0),\n\n      published_at: snippet.publishedAt ?? null,\n      updated_at: snippet.updatedAt ?? null,\n    }\n  });\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -144
+      ],
+      "id": "7954cb9c-a520-4dff-abc5-6e1abc953d30",
+      "name": "Normalize Comment Data"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1024,
+        256
+      ],
+      "id": "36facb52-c212-4978-8cc7-cab861427e0a",
+      "name": "Loop Through Comments"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = [];\n\nfor (const item of $input.all()) {\n  const video = item.json;\n\n  // A valid video ID is mandatory\n  if (!video.id) {\n    continue;\n  }\n\n  // Convert YouTube ISO 8601 duration (e.g. PT10M52S) to seconds\n  let durationSeconds = null;\n\n  if (video.duration) {\n    const match = video.duration.match(\n      /PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?/\n    );\n\n    if (match) {\n      durationSeconds =\n        Number(match[1] ?? 0) * 3600 +\n        Number(match[2] ?? 0) * 60 +\n        Number(match[3] ?? 0);\n    }\n  }\n\n  output.push({\n    json: {\n      video_id: video.id,\n      search_phrase: video.searchPhrase ?? null,\n\n      title: video.title ?? '',\n      description: video.description ?? null,\n\n      channel_id: video.channelId ?? null,\n      channel_title: video.channelTitle ?? '',\n\n      published_at: video.publishedAt ?? null,\n      duration_seconds: durationSeconds,\n\n      view_count:\n        video.viewCount != null\n          ? Number(video.viewCount)\n          : null,\n\n      like_count:\n        video.likeCount != null\n          ? Number(video.likeCount)\n          : null,\n\n      comment_count:\n        video.commentCount != null\n          ? Number(video.commentCount)\n          : 0,\n\n      youtube_url: `https://www.youtube.com/watch?v=${video.id}`,\n    }\n  });\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        -144
+      ],
+      "id": "18bcadf1-25c0-42c9-921a-86f942410a41",
+      "name": "Normalize Video Data"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/demo/youtube-pain-miner",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1040,
+        -144
+      ],
+      "id": "69f1273e-c76a-438b-9bf1-f91049c41036",
+      "name": "Receive YouTube Video URL"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawBody = $json.body ?? $json;\n\nconst body = Array.isArray(rawBody)\n  ? rawBody[0]\n  : rawBody;\n\nconst inputUrl =\n  body?.inputs?.video ??\n  body?.youtube_url ??\n  body?.video ??\n  body?.url ??\n  null;\n\nif (typeof inputUrl !== 'string' || !inputUrl.trim()) {\n  throw new Error('Missing YouTube URL');\n}\n\nconst url = inputUrl.trim();\n\nconst patterns = [\n  /[?&]v=([A-Za-z0-9_-]{11})/,\n  /youtu\\.be\\/([A-Za-z0-9_-]{11})/,\n  /youtube\\.com\\/shorts\\/([A-Za-z0-9_-]{11})/,\n  /youtube\\.com\\/embed\\/([A-Za-z0-9_-]{11})/,\n  /youtube\\.com\\/live\\/([A-Za-z0-9_-]{11})/\n];\n\nlet videoId = null;\n\nfor (const pattern of patterns) {\n  const match = url.match(pattern);\n\n  if (match?.[1]) {\n    videoId = match[1];\n    break;\n  }\n}\n\nif (!videoId) {\n  throw new Error(\n    `Could not extract YouTube video ID from: ${url}`\n  );\n}\n\nreturn [\n  {\n    json: {\n      video_id: videoId,\n      youtube_url: `https://www.youtube.com/watch?v=${videoId}`\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -832,
+        -144
+      ],
+      "id": "e3715cfd-f179-4864-aa80-f8da0ff7bf74",
+      "name": "Extract Video ID"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/videos?",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $json.video_id }}"
+            },
+            {
+              "name": "part",
+              "value": "contentDetails,snippet,statistics"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7cd2ae1c-e736-450b-94aa-91a08bead963",
+      "name": "Get Video Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -624,
+        -144
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/alpha/decisions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    model: \"typesafe/jev-1.13\",\n    state: {\n      video_title: $(\"Normalize Video Data\").first().json.title,\n      channel: $(\"Normalize Video Data\").first().json.channel_title,\n      comment: $json.comment_text\n    },\n    questions: {\n      classification: {\n        type: \"choice\",\n        instructions: \"Classify the YouTube comment into the single best market research category. Judge the comment itself. Use the video title and channel only to understand ambiguous references. Do not invent information that is not stated or clearly implied.\",\n        criteria: {\n          PAIN: \"The comment describes a real problem, friction, limitation, negative business experience, wasted time, repetitive manual work, high cost, poor value, unreliability, difficult setup, poor business fit, lack of useful context, lost customers, leads, productivity, money, or another adoption barrier.\",\n          OPPORTUNITY: \"The comment expresses a concrete desired capability, improvement, use case, product idea, service idea, missing feature, automation request, industry-specific example, useful application, or trial option.\",\n          IRRELEVANT: \"The comment contains no useful business pain or opportunity. This includes generic praise or thanks, spam, promotion, unrelated discussion, jokes, generic enthusiasm, or simple questions that reveal no identifiable business need.\"\n        }\n      }\n    }\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -816,
+        272
+      ],
+      "id": "7195b20a-29d5-4d55-b207-524fb879e11e",
+      "name": "Classify Comment",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Loop Through Comments').item.json;\nconst decision = $json.answers?.classification;\n\nconst classification = decision?.choice;\n\nif (!['PAIN', 'OPPORTUNITY', 'IRRELEVANT'].includes(classification)) {\n  throw new Error(\n    `Invalid classification: ${JSON.stringify(classification)}`\n  );\n}\n\nreturn {\n  json: {\n    ...source,\n    processing_status: 'processed',\n    classification,\n    classification_confidence: Number(decision.confidence ?? 0),\n    classification_probabilities: decision.probabilities ?? {},\n    classification_model: $json.model ?? null,\n    classification_provider: $json.provider ?? null,\n    classification_cost: Number($json.usage?.cost ?? 0)\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        272
+      ],
+      "id": "6fd737da-e7a3-467b-8309-3f4ab7b7eab9",
+      "name": "Normalize Classification"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c6c0aabc-9144-43ed-8d92-ed5b3e4983fa",
+              "leftValue": "={{ $json.classification !== 'IRRELEVANT' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -384,
+        272
+      ],
+      "id": "ceb9d2cf-e55c-4098-8d06-86bbed6a1055",
+      "name": "Is Relevant Signal?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst video = $('Normalize Video Data').first().json;\n\nconst systemPrompt = `\nYou are a market research signal writer.\n\nYou receive a YouTube comment that has already been classified as either PAIN or OPPORTUNITY.\n\nYour task is only to write one concise business signal describing what the comment reveals.\n\nRules:\n- Do not change or question the provided classification.\n- Base the signal on the original comment.\n- Use the video context only to understand ambiguous references.\n- Do not invent information that is not stated or clearly implied.\n- Write one concise sentence.\n- For PAIN, describe the problem, friction, limitation, or negative experience.\n- For OPPORTUNITY, describe the desired capability, improvement, use case, or opportunity.\n- Do not include the words PAIN or OPPORTUNITY in the signal.\n- Do not add explanations or reasoning.\n\nReturn exactly one valid JSON object:\n\n{\n  \"signal\": \"Concise business signal\"\n}\n`;\n\nreturn items.map(item => {\n  const comment = item.json;\n\n  const userPrompt = `\nVIDEO CONTEXT\n\nVideo title:\n${video.title}\n\nCOMMENT CLASSIFICATION\n\n${comment.classification}\n\nCOMMENT\n\n${comment.comment_text}\n`;\n\n  return {\n    json: {\n      ...comment,\n      system_prompt: systemPrompt.trim(),\n      user_prompt: userPrompt.trim()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        272
+      ],
+      "id": "02a3df86-5838-4b04-8aa8-d259ccb584fa",
+      "name": "Prepare Signal Generation"
+    },
+    {
+      "parameters": {
+        "jsCode": "const analysisItems = $input.all();\nconst sourceItems = $('Prepare Signal Generation').all();\n\nif (analysisItems.length !== sourceItems.length) {\n  throw new Error(\n    `Signal count mismatch: received ${analysisItems.length} LLM outputs ` +\n    `for ${sourceItems.length} comments`\n  );\n}\n\nconst output = [];\n\nfor (let i = 0; i < analysisItems.length; i++) {\n  const source = sourceItems[i].json;\n  const llmItem = analysisItems[i].json;\n\n  if (\n    source.classification !== 'PAIN' &&\n    source.classification !== 'OPPORTUNITY'\n  ) {\n    throw new Error(\n      `Unexpected classification ${JSON.stringify(source.classification)} ` +\n      `for comment ${source.comment_id}`\n    );\n  }\n\n  let parsed;\n\n  if (\n    llmItem &&\n    typeof llmItem === 'object' &&\n    typeof llmItem.signal === 'string'\n  ) {\n    parsed = llmItem;\n  } else {\n    let raw =\n      llmItem?.text ??\n      llmItem?.output ??\n      llmItem?.response ??\n      llmItem;\n\n    if (typeof raw !== 'string') {\n      throw new Error(\n        `Invalid signal output type for comment ${source.comment_id}`\n      );\n    }\n\n    raw = raw\n      .trim()\n      .replace(/^```json\\s*/i, '')\n      .replace(/^```\\s*/, '')\n      .replace(/\\s*```$/, '')\n      .trim();\n\n    try {\n      parsed = JSON.parse(raw);\n    } catch (error) {\n      throw new Error(\n        `Invalid JSON for comment ${source.comment_id}: ${error.message}`\n      );\n    }\n  }\n\n  if (\n    typeof parsed.signal !== 'string' ||\n    !parsed.signal.trim()\n  ) {\n    throw new Error(\n      `Missing signal for ${source.classification} comment ${source.comment_id}`\n    );\n  }\n\n  output.push({\n    json: {\n      comment_id: source.comment_id,\n      video_id: source.video_id,\n      comment_text: source.comment_text,\n      like_count: source.like_count,\n      reply_count: source.reply_count,\n      published_at: source.published_at,\n      updated_at: source.updated_at,\n      processing_status: 'processed',\n      classification: source.classification,\n      classification_confidence: source.classification_confidence,\n      classification_probabilities: source.classification_probabilities,\n      classification_model: source.classification_model,\n      classification_provider: source.classification_provider,\n      classification_cost: source.classification_cost,\n      signal: parsed.signal.trim()\n    }\n  });\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        256
+      ],
+      "id": "3a5b0eda-de2d-4a16-84a7-2e8b4ff78c2e",
+      "name": "Validate Generated Signal",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.user_prompt }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "={{ $json.system_prompt }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        16,
+        272
+      ],
+      "id": "6e35984a-b1a7-4962-8098-819b7bc5965a",
+      "name": "Generate signal",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Loop Through Comments').item.json;\n\nconst errorMessage =\n  $json?.error?.message ??\n  $json?.error?.description ??\n  $json?.message ??\n  $json?.error ??\n  'Unknown processing error';\n\nreturn {\n  json: {\n    comment_id: source.comment_id,\n    video_id: source.video_id,\n    comment_text: source.comment_text,\n    like_count: source.like_count,\n    reply_count: source.reply_count,\n    published_at: source.published_at,\n    updated_at: source.updated_at,\n    processing_status: 'error',\n    error_message:\n      typeof errorMessage === 'string'\n        ? errorMessage\n        : JSON.stringify(errorMessage)\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        480
+      ],
+      "id": "837eade9-fd1d-4800-86a0-e6ed39e1a378",
+      "name": "Record Comment Error"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(item => item.json);\nconst video = $('Normalize Video Data').first().json;\n\nconst errors = items.filter(\n  item => item.processing_status === 'error'\n);\n\nconst processed = items.filter(\n  item => item.processing_status === 'processed'\n);\n\nconst pains = processed.filter(\n  item => item.classification === 'PAIN'\n);\n\nconst opportunities = processed.filter(\n  item => item.classification === 'OPPORTUNITY'\n);\n\nconst irrelevant = processed.filter(\n  item => item.classification === 'IRRELEVANT'\n);\n\nconst relevant = [...pains, ...opportunities];\n\nconst formatComment = (row, index) => {\n  const comment = String(row.comment_text ?? '')\n    .split('\\n')\n    .map(line => `> ${line}`)\n    .join('\\n');\n\n  return [\n    `### ${index + 1}. ${row.signal}`,\n    '',\n    comment,\n    '',\n    `*Likes: ${Number(row.like_count ?? 0)} · Replies: ${Number(row.reply_count ?? 0)}*`\n  ].join('\\n');\n};\n\nconst sections = [\n  '# YouTube Signal Report',\n  '',\n  `**Video:** ${video.title}`,\n  `**Channel:** ${video.channel_title}`,\n  `**URL:** ${video.youtube_url}`,\n  '',\n  '## Processing Summary',\n  '',\n  `- Comments received: ${items.length}`,\n  `- Successfully processed: ${processed.length}`,\n  `- Errors: ${errors.length}`,\n  `- Pain signals: ${pains.length}`,\n  `- Opportunity signals: ${opportunities.length}`,\n  `- Irrelevant comments: ${irrelevant.length}`,\n  '',\n  `## Pain (${pains.length})`,\n  '',\n  pains.length\n    ? pains.map(formatComment).join('\\n\\n')\n    : '_No pain signals identified._',\n  '',\n  `## Opportunities (${opportunities.length})`,\n  '',\n  opportunities.length\n    ? opportunities.map(formatComment).join('\\n\\n')\n    : '_No opportunity signals identified._'\n];\n\nif (errors.length) {\n  sections.push(\n    '',\n    '## Processing Errors',\n    '',\n    `${errors.length} comment${errors.length === 1 ? '' : 's'} could not be processed.`\n  );\n}\n\nconst text = sections.join('\\n');\n\nconst signals = relevant.map(row => ({\n  comment_id: row.comment_id,\n  classification: row.classification,\n  signal: row.signal,\n  comment_text: row.comment_text,\n  like_count: Number(row.like_count ?? 0),\n  reply_count: Number(row.reply_count ?? 0),\n  published_at: row.published_at ?? null,\n  updated_at: row.updated_at ?? null,\n  classification_confidence: row.classification_confidence ?? null,\n  classification_probabilities: row.classification_probabilities ?? null,\n  classification_model: row.classification_model ?? null,\n  classification_provider: row.classification_provider ?? null,\n  classification_cost: Number(row.classification_cost ?? 0)\n}));\n\nconst processingErrors = errors.map(row => ({\n  comment_id: row.comment_id ?? null,\n  comment_text: row.comment_text ?? null,\n  error_message: row.error_message ?? 'Unknown processing error'\n}));\n\nreturn [\n  {\n    json: {\n      text,\n      json: {\n        video: {\n          video_id: video.video_id,\n          title: video.title,\n          channel_id: video.channel_id,\n          channel_title: video.channel_title,\n          published_at: video.published_at,\n          duration_seconds: video.duration_seconds,\n          view_count: video.view_count,\n          like_count: video.like_count,\n          comment_count: video.comment_count,\n          youtube_url: video.youtube_url\n        },\n        summary: {\n          total_comment_count: items.length,\n          processed_comment_count: processed.length,\n          error_count: errors.length,\n          relevant_signal_count: relevant.length,\n          pain_count: pains.length,\n          opportunity_count: opportunities.length,\n          irrelevant_count: irrelevant.length\n        },\n        signals,\n        errors: processingErrors\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        208
+      ],
+      "id": "5ed6527c-8e1f-424d-8c20-253a75108a2a",
+      "name": "Build Signal Report"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{\n  {\n    markdown: $json.text,\n    json: $json.json\n  }\n}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        832,
+        208
+      ],
+      "id": "0301b65b-c40b-4c49-ae84-b1705e67dabb",
+      "name": "Return Signal Report"
+    },
+    {
+      "parameters": {
+        "jsCode": "const MAX_COMMENTS = 40;\n\nreturn $input\n  .all()\n  .slice(0, MAX_COMMENTS);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -144
+      ],
+      "id": "73c511c8-1c3b-4267-9cb4-0b6ff540bbc2",
+      "name": "Limit Comments"
+    },
+    {
+      "parameters": {
+        "content": "# 1. VIDEO INPUT & CONTEXT\n\nReceive a YouTube video URL, extract the video ID, and retrieve the video metadata used as context for comment analysis.",
+        "height": 112,
+        "width": 992
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1072,
+        -304
+      ],
+      "id": "c89b752f-aa78-4947-a965-eb9e91725251",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "# 2. COMMENT RETRIEVAL\n\nRetrieve top-level YouTube comments with pagination, normalize the data, and limit analysis to 40 comments to keep the demo fast and predictable. ",
+        "height": 112,
+        "width": 816,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        -304
+      ],
+      "id": "6d574409-9bd6-4369-a651-0de24be634b5",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/commentThreads?",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "videoId",
+              "value": "={{ $json.video_id }}"
+            },
+            {
+              "name": "part",
+              "value": "snippet"
+            },
+            {
+              "name": "maxResults",
+              "value": "100"
+            },
+            {
+              "name": "textFormat",
+              "value": "plainText"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "parameters": {
+                "parameters": [
+                  {
+                    "name": "pageToken",
+                    "value": "={{ $response?.body?.nextPageToken || '' }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.nextPageToken }}"
+            }
+          }
+        }
+      },
+      "id": "a96c856b-89f9-48f8-80b5-87628dd6e60e",
+      "name": "Retrieve Comment Threads",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        0,
+        -144
+      ],
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "# 3. HYBRID SIGNAL EXTRACTION\n\nEach comment is first classified as Pain, Opportunity, or Irrelevant using a lightweight decision model.\n\nOnly relevant comments are sent to a generative LLM to produce a concise market signal.\n\nIndividual failures are recorded and skipped so one bad comment does not stop the full analysis.",
+        "height": 144,
+        "width": 1520,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1040,
+        64
+      ],
+      "id": "36fd98b3-eb6d-41f2-9b7b-d70aa888dcc9",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "# 4. REPORT & RESPONSE\n\nAggregate the results and return both a human-readable Markdown report and structured JSON for downstream automation.",
+        "height": 112,
+        "width": 544,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        512,
+        64
+      ],
+      "id": "57485044-3e1c-4ffa-9eab-ac795c2ad996",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "model": "mistralai/ministral-3b-2512",
+        "options": {
+          "responseFormat": "json_object",
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        128,
+        384
+      ],
+      "id": "1e1ddbbc-525d-4d4d-9b01-df796d1d923c",
+      "name": "Ministral 3B Signal Generator"
+    }
+  ],
+  "connections": {
+    "Select Video Metadata": {
+      "main": [
+        [
+          {
+            "node": "Normalize Video Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Comment Threads": {
+      "main": [
+        [
+          {
+            "node": "Normalize Comment Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Comment Data": {
+      "main": [
+        [
+          {
+            "node": "Limit Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Through Comments": {
+      "main": [
+        [
+          {
+            "node": "Build Signal Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Classify Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Video Data": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Comment Threads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receive YouTube Video URL": {
+      "main": [
+        [
+          {
+            "node": "Extract Video ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Video ID": {
+      "main": [
+        [
+          {
+            "node": "Get Video Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Video Details": {
+      "main": [
+        [
+          {
+            "node": "Select Video Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Comment": {
+      "main": [
+        [
+          {
+            "node": "Normalize Classification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Comment Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Classification": {
+      "main": [
+        [
+          {
+            "node": "Is Relevant Signal?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Relevant Signal?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Signal Generation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Through Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Signal Generation": {
+      "main": [
+        [
+          {
+            "node": "Generate signal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Generated Signal": {
+      "main": [
+        [
+          {
+            "node": "Loop Through Comments",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Comment Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate signal": {
+      "main": [
+        [
+          {
+            "node": "Validate Generated Signal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Comment Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Comment Error": {
+      "main": [
+        [
+          {
+            "node": "Loop Through Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Signal Report": {
+      "main": [
+        [
+          {
+            "node": "Return Signal Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit Comments": {
+      "main": [
+        [
+          {
+            "node": "Loop Through Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Comment Threads": {
+      "main": [
+        [
+          {
+            "node": "Split Out Comment Threads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Ministral 3B Signal Generator": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate signal",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "Atlantic/Canary",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}
